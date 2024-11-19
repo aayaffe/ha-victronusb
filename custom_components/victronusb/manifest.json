@@ -1,0 +1,13 @@
+{
+  "domain": "victronusb",
+  "name": "Victron USB Integration",
+  "documentation": "https://github.com/aayaffe/ha-victronusb",
+  "dependencies": [],
+  "integration_type": "hub",
+  "requirements": [],
+  "codeowners": [],
+  "version": "0.1.0",
+  "config_flow": true,
+  "iot_class": "local_polling"
+}
+
