@@ -1,137 +1,62 @@
 [
     {
-        "sentence_id": "V",
-        "sentence_description": "Main or channel 1 (battery) voltage",
         "group": "Battery",
         "fields": [
             {
-                "name": "Voltage",
                 "unique_id": "V",
                 "full_description": "Main or channel 1 (battery) voltage",
                 "short_description": "ch1 voltage",
                 "unit_of_measurement": "mV"
-            }
-        ]
-    },
-    {
-        "sentence_id": "VS",
-        "sentence_description": "Auxilery (starter) voltage",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "VS",
                 "full_description": "Auxilery (starter) voltage",
                 "short_description": "aux voltage",
                 "unit_of_measurement": "mV"
-            }
-        ]
-    },
-    {
-        "sentence_id": "VM",
-        "sentence_description": "Mid-point voltage of the battery bank",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "VM",
                 "full_description": "Mid-point voltage of the battery bank",
                 "short_description": "mid point voltage",
                 "unit_of_measurement": "mV"
-            }
-        ]
-    },
-    {
-        "sentence_id": "DM",
-        "sentence_description": "Mid-point deviation of the battery bank",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "DM",
                 "full_description": "Mid-point deviation of the battery bank",
                 "short_description": "mid point deviation",
                 "unit_of_measurement": "P"
-            }
-        ]
-    },
-    {
-        "sentence_id": "I",
-        "sentence_description": "Main or channel 1 battery current",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "I",
                 "full_description": "Main or channel 1 battery current",
                 "short_description": "main current",
                 "unit_of_measurement": "mA"
-            }
-        ]
-    },
-    {
-        "sentence_id": "T",
-        "sentence_description": "Battery temperature",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "T",
                 "full_description": "Battery temperature",
                 "short_description": "bat temp",
                 "unit_of_measurement": "Dc"
-            }
-        ]
-    },
-    {
-        "sentence_id": "P",
-        "sentence_description": "Instantaneous power",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "P",
                 "full_description": "Instantaneous power",
                 "short_description": "inst power",
                 "unit_of_measurement": "W"
-            }
-        ]
-    },
-    {
-        "sentence_id": "CE",
-        "sentence_description": "Consumed Amp Hours",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "CE",
                 "full_description": "Consumed Amp Hours",
                 "short_description": "consumed Ah",
                 "unit_of_measurement": "mAh"
-            }
-        ]
-    },
-    {
-        "sentence_id": "SOC",
-        "sentence_description": "State of charge",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "SOC",
                 "full_description": "State of charge",
                 "short_description": "SOC",
                 "unit_of_measurement": "P"
-            }
-        ]
-    },
-    {
-        "sentence_id": "TTG",
-        "sentence_description": "Time to go",
-        "group": "Battery",
-        "fields": [
+            },
             {
-                "name": "Voltage",
                 "unique_id": "TTG",
                 "full_description": "Time to go",
                 "short_description": "TTG",

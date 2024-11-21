@@ -20,7 +20,7 @@ CONF_BAUDRATE = "baudrate"
 CONF_SERIAL_PORT = "serial_port"
 
 
-DEFAULT_NAME = "Serial Sensor"
+DEFAULT_NAME = "Victron VE.Direct Serial Sensor"
 DEFAULT_BAUDRATE = 19200
 DEFAULT_BYTESIZE = serial_asyncio.serial.EIGHTBITS
 DEFAULT_PARITY = serial_asyncio.serial.PARITY_NONE
@@ -94,12 +94,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         result_dict = {}
         for sentence in smart_data:
             group = sentence["group"]  # Capture the group for all fields within this sentence
-            sentence_desc = sentence["sentence_description"]
             for field in sentence["fields"]:
                 result_dict[field["unique_id"]] = {
                     "full_description": field["full_description"],
                     "group": group,
-                    "sentence_description": sentence_desc,
                     "unit_of_measurement": field.get("unit_of_measurement", None)
                 }
 
@@ -156,69 +154,6 @@ def translate_unit(unit_of_measurement):
     return translation.get(unit_of_measurement, unit_of_measurement)
 
 
-# def decimal_sensor(hass,
-#                    sensor_name,
-#                    full_desc,
-#                    field_data,
-#                    unit_of_measurement,
-#                    fields,
-#                    created_sensors_key,
-#                    add_entities_key,
-#                    group,
-#                    device_name,
-#                    sentence_type):
-#
-#
-#     _LOGGER.debug(f"Processing decimal conversion for {sensor_name} with data {field_data} and unit {unit_of_measurement}")
-#
-#     # Determine the index for the compass direction based on the last character of the unit_of_measurement
-#     compass_field_idx = int(unit_of_measurement[-1])
-#     if compass_field_idx >= len(fields):
-#         _LOGGER.error(f"Compass index {compass_field_idx} out of bounds for {sensor_name}")
-#         return
-#
-#     # Extract compass direction
-#     compass_direction = fields[compass_field_idx].strip()
-#     _LOGGER.debug(f"Compass direction for {sensor_name} is {compass_direction}")
-#
-#     # Convert field data to decimal
-#     try:
-#         if 'GPSLAT' in unit_of_measurement:
-#             decimal_value = convert_latitude(field_data, compass_direction)
-#         elif 'GPSLON' in unit_of_measurement:
-#             decimal_value = convert_longitude(field_data, compass_direction)
-#         else:
-#             _LOGGER.debug(f"Unsupported unit of measurement for decimal conversion: {unit_of_measurement}")
-#             return
-#
-#         _LOGGER.debug(f"Converted decimal value for {sensor_name} is {decimal_value}")
-#     except Exception as e:
-#         _LOGGER.error(f"Error converting GPS data for {sensor_name}: {e}")
-#         return
-#
-#     # Create or update the sensor
-#     decimal_sensor_name = f"{sensor_name}_decimal"
-#     decimal_desc = f"{full_desc} Decimal Coversion"
-#     if decimal_sensor_name in hass.data[created_sensors_key]:
-#         # Update existing decimal sensor
-#         decimal_sensor = hass.data[created_sensors_key][decimal_sensor_name]
-#         decimal_sensor.set_state(decimal_value)
-#         _LOGGER.debug(f"Updated decimal sensor {decimal_sensor_name} with value {decimal_value}")
-#     else:
-#         # Create new decimal sensor
-#         decimal_sensor = SmartSensor(
-#             decimal_sensor_name,
-#             decimal_desc,
-#             decimal_value,
-#             group,
-#             "°",
-#             device_name,
-#             sentence_type
-#         )
-#         hass.data[add_entities_key]([decimal_sensor])
-#         hass.data[created_sensors_key][decimal_sensor_name] = decimal_sensor
-#         _LOGGER.debug(f"Created new decimal sensor {decimal_sensor_name} with value {decimal_value}")
-
 
 async def set_smart_sensors(hass, line, instance_name):
     """Process the content of the line related to the smart sensors."""
@@ -244,12 +179,7 @@ async def set_smart_sensors(hass, line, instance_name):
         victronusb_data_key = f"{instance_name}_victronusb_data"
         created_sensors_key = f"{instance_name}_created_sensors"
         add_entities_key = f"{instance_name}_add_entities"
-        # gps_key = f"{instance_name}_gps"
 
-
-        # for idx, field_data in enumerate(fields[1:], 1):
-        #     if idx == len(fields) - 1:  # Skip the last field since it's a check digit
-        #         break
         field_data = fields[1]
         sentence_type = field_label
         sensor_name = f"{sentence_type}"
@@ -267,21 +197,8 @@ async def set_smart_sensors(hass, line, instance_name):
 
             full_desc = sensor_info["full_description"] if sensor_info else sensor_name
             group = sensor_info["group"]
-            sentence_description = sensor_info["sentence_description"]
             unit_of_measurement = sensor_info.get("unit_of_measurement")
-
-            # Check if unit_of_measurement matches the pattern "#x" and x is within the valid index range
-            if unit_of_measurement and unit_of_measurement.startswith("#") and unit_of_measurement[1:].isdigit():
-                reference_idx = int(unit_of_measurement[1:])  # Extract the integer x
-                # Ensure the reference index is within the bounds of the fields list
-                if 1 <= reference_idx < len(fields):
-                    unit_of_measurement = translate_unit(fields[reference_idx])
-                else:
-                    _LOGGER.debug(f"Referenced unit_of_measurement index {reference_idx} is out of bounds for sensor: {sensor_name}")
-                    return  # Skip to the next iteration if the reference is out of bounds
-
-            device_name = sentence_description
-
+            device_name = full_desc
             unit = unit_of_measurement
 
             sensor = SmartSensor(
