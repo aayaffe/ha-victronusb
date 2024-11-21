@@ -223,7 +223,7 @@ def translate_unit(unit_of_measurement):
 async def set_smart_sensors(hass, line, instance_name):
     """Process the content of the line related to the smart sensors."""
     try:
-        if not line or not line.startswith("$"):
+        if not line:
             return
 
         # Make the checksum a seperate field instead of joined to the last field
@@ -251,14 +251,8 @@ async def set_smart_sensors(hass, line, instance_name):
         #     if idx == len(fields) - 1:  # Skip the last field since it's a check digit
         #         break
         field_data = fields[1]
-        sentence_type = field_label[2:]
+        sentence_type = field_label
         sensor_name = f"{sentence_type}"
-
-        # Initialize variables for GPS conversion fields
-        # group = ""
-        # sentence_description = ""
-        # device_name = ""
-        # full_desc  = ""
 
         if sensor_name not in hass.data[created_sensors_key]:
             _LOGGER.debug(f"Creating field sensor: {sensor_name}")
@@ -288,12 +282,6 @@ async def set_smart_sensors(hass, line, instance_name):
 
             device_name = sentence_description
 
-            # Reset unit for GPS conversion fields
-            # if unit_of_measurement and unit_of_measurement.startswith("GPS"):
-            #         unit = "°"
-            #         # Keep track od the sensors that need GPS conversions
-            #         hass.data[gps_key][sensor_name] = unit_of_measurement
-            # else:
             unit = unit_of_measurement
 
             sensor = SmartSensor(
@@ -316,24 +304,6 @@ async def set_smart_sensors(hass, line, instance_name):
             _LOGGER.debug(f"Updating field sensor: {sensor_name}")
             sensor = hass.data[created_sensors_key][sensor_name]
             sensor.set_state(field_data)
-                
-            # # Create/update an additional sensor for GPS conversion fields
-            # if sensor_name in hass.data[gps_key]:
-            #
-            #     # Retrive GPS conversion info
-            #     unit_of_measurement = hass.data[gps_key][sensor_name]
-            #
-            #     decimal_sensor(hass,
-            #                    sensor_name,
-            #                    full_desc,
-            #                    field_data,
-            #                    unit_of_measurement,
-            #                    fields,
-            #                    created_sensors_key,
-            #                    add_entities_key,
-            #                    group,
-            #                    device_name,
-            #                    sentence_type)
 
 
     except IndexError:
