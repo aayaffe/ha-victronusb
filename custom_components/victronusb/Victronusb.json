@@ -61,6 +61,122 @@
                 "full_description": "Time to go",
                 "short_description": "TTG",
                 "unit_of_measurement": "MIN"
+            },
+            {
+                "unique_id": "Alarm",
+                "full_description": "Alarm condition active",
+                "short_description": "Alarm"
+            },
+            {
+                "unique_id": "Relay",
+                "full_description": "Relay state",
+                "short_description": "Relay"
+            },
+            {
+                "unique_id": "AR",
+                "full_description": "Alarm reason",
+                "short_description": "AR"
+            },
+            {
+                "unique_id": "H1",
+                "full_description": "Depth of the deepest discharge",
+                "short_description": "deepest discharge",
+                "unit_of_measurement": "mAh"
+            },
+            {
+                "unique_id": "H2",
+                "full_description": "Depth of the last discharge",
+                "short_description": "last discharge",
+                "unit_of_measurement": "mAh"
+            },
+            {
+                "unique_id": "H3",
+                "full_description": "Depth of the average discharge",
+                "short_description": "average discharge",
+                "unit_of_measurement": "mAh"
+            },
+            {
+                "unique_id": "H4",
+                "full_description": "Number of charge cycles",
+                "short_description": "charge cycles"
+            },
+            {
+                "unique_id": "H5",
+                "full_description": "Number of full discharges",
+                "short_description": "full discharges"
+            },
+            {
+                "unique_id": "H6",
+                "full_description": "Cumulative Amp Hours drawn",
+                "short_description": "cumulative Ah",
+                "unit_of_measurement": "mAh"
+            },
+            {
+                "unique_id": "H7",
+                "full_description": "Minimum main voltage",
+                "short_description": "min main voltage",
+                "unit_of_measurement": "mV"
+            },
+            {
+                "unique_id": "H8",
+                "full_description": "Maximum main voltage",
+                "short_description": "max main voltage",
+                "unit_of_measurement": "mV"
+            },
+            {
+                "unique_id": "H9",
+                "full_description": "Number of seconds since last full charge",
+                "short_description": "last full charge",
+                "unit_of_measurement": "SEC"
+            },
+            {
+                "unique_id": "H10",
+                "full_description": "Number of automatic synchronizations",
+                "short_description": "auto sync"
+            },
+            {
+                "unique_id": "H11",
+                "full_description": "Number of low main voltage alarms",
+                "short_description": "low main voltage alarms"
+            },
+            {
+                "unique_id": "H12",
+                "full_description": "Number of high main voltage alarms",
+                "short_description": "high main voltage alarms"
+            },
+            {
+                "unique_id": "H15",
+                "full_description": "Minimum auxiliary (battery) voltage",
+                "short_description": "min aux voltage",
+                "unit_of_measurement": "mV"
+            },
+            {
+                "unique_id": "H16",
+                "full_description": "Maximum auxiliary (battery) voltage",
+                "short_description": "max aux voltage",
+                "unit_of_measurement": "mV"
+            },
+            {
+                "unique_id": "H17",
+                "full_description": "Amount of discharged energy (BMV)",
+                "short_description": "discharged energy",
+                "unit_of_measurement": "ckWh"
+            },
+            {
+                "unique_id": "H18",
+                "full_description": "Amount of charged energy (BMV)",
+                "short_description": "charged energy",
+                "unit_of_measurement": "ckWh"
+            },
+            {
+                "unique_id": "FW",
+                "full_description": "Firmware version (16 bit)",
+                "short_description": "FW"
+            },
+            {
+                "unique_id": "PID",
+                "full_description": "Product ID",
+                "short_description": "PID"
             }
         ]
     }

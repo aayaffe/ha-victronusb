@@ -1,0 +1,34 @@
+{
+  "config": {
+    "error": {
+      "name_exists": "This device name is already in use, please choose a different one.",
+      "cannot_connect": "Failed to connect to the server. Please check the IP address and port."
+    },
+    "step": {
+      "user": {
+        "title": "Connect to Victron USB Sensor",
+        "description": "Please enter the Serial Port, and Baudrate of your USB victron device.",
+        "data": {
+          "serial_port": "Serial Port Name",
+          "baudrate": "Baud Rate"
+        }
+      }
+    },
+    "success": {
+      "title": "Connection Successful",
+      "description": "You have successfully connected to Victron USB Sensor."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Victron USB Sensor",
+        "description": "Update the Serial Port and Baudrate of your Victron USB device.",
+        "data": {
+          "serial_port": "Serial Port Name",
+          "baudrate": "Baud Rate"
+        }
+      }
+    }
+  }
+}
