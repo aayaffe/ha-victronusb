@@ -36,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("Unloading VictronUSB integration entry: %s", entry.as_dict())
     hass.data[DOMAIN].pop(entry.entry_id)
-    await hass.config_entries.async_forward_entry_unload(entry, "sensor")
+    await hass.config_entries.async_forward_entry_unloads(entry, ["sensor"])
     _LOGGER.debug("VictronUSB entry unloaded successfully")
     return True
 
