@@ -1,512 +1,292 @@
-# Standard Library Imports
+"""Sensor platform for Victron VE.Direct USB devices."""
+
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Callable
+from datetime import datetime
 import json
 import logging
-import os
+from pathlib import Path
+from typing import Any
+
 import serial_asyncio
-from datetime import datetime, timedelta
-from serial import SerialException
+from serial import EIGHTBITS, PARITY_NONE, STOPBITS_ONE
 
-# Home Assistant Imports
-from homeassistant.core import callback
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.const import CONF_NAME
+from homeassistant.core import HomeAssistant
 
-from homeassistant.const import (
-    CONF_NAME,
-    EVENT_HOMEASSISTANT_STOP
-)
+from . import DOMAIN
+from .serial_connection import SerialConnectionManager
 
 CONF_BAUDRATE = "baudrate"
 CONF_SERIAL_PORT = "serial_port"
 
-
-DEFAULT_NAME = "Victron VE.Direct Serial Sensor"
 DEFAULT_BAUDRATE = 19200
-DEFAULT_BYTESIZE = serial_asyncio.serial.EIGHTBITS
-DEFAULT_PARITY = serial_asyncio.serial.PARITY_NONE
-DEFAULT_STOPBITS = serial_asyncio.serial.STOPBITS_ONE
-DEFAULT_XONXOFF = False
-DEFAULT_RTSCTS = False
-DEFAULT_DSRDTR = False
-
-# Setting up logging and configuring constants and default values
+FRAME_SILENCE_TIMEOUT = 30.0
+MIN_UPDATE_INTERVAL = 5.0
 
 _LOGGER = logging.getLogger(__name__)
 
-
-async def update_sensor_availability(hass,instance_name):
-    """Update the availability of all sensors every 5 minutes."""
-    
-    created_sensors_key = f"{instance_name}_created_sensors"
-
-    while True:
-        _LOGGER.debug("Running update_sensor_availability")
-        await asyncio.sleep(300)  # wait for 5 minutes
-
-        for sensor in hass.data[created_sensors_key].values():
-            sensor.update_availability()
-
-def load_smart_data(json_path):
-    with open(json_path, "r") as file:
-        return json.load(file)
+SensorMetadata = dict[str, dict[str, str | None]]
 
 
-# The main setup function to initialize the sensor platform
+def load_smart_data(json_path: Path) -> SensorMetadata:
+    """Load and flatten the bundled VE.Direct field metadata."""
+    with json_path.open(encoding="utf-8") as file:
+        smart_data = json.load(file)
 
-async def async_setup_entry(hass, entry, async_add_entities):
-    # Retrieve configuration from entry
-    name = entry.data[CONF_NAME]
-    serial_port = entry.data[CONF_SERIAL_PORT]
-    baudrate = entry.data[CONF_BAUDRATE]
-    
-    bytesize = DEFAULT_BYTESIZE
-    parity = DEFAULT_PARITY
-    stopbits = DEFAULT_STOPBITS
-    xonxoff = DEFAULT_XONXOFF
-    rtscts = DEFAULT_RTSCTS
-    dsrdtr = DEFAULT_DSRDTR
-
-    # Log the retrieved configuration values for debugging purposes
-    _LOGGER.info(f"Configuring sensor with name: {name}, serial_port: {serial_port}, baudrate: {baudrate}")
-    
-    # Initialize unique dictionary keys based on the integration name
-    add_entities_key = f"{name}_add_entities"
-    created_sensors_key = f"{name}_created_sensors"
-    victronusb_data_key = f"{name}_victronusb_data"
-    gps_key = f"{name}_gps"
-
-     # Save a reference to the add_entities callback
-    _LOGGER.debug(f"Assigning async_add_entities to hass.data[{add_entities_key}].")
-    hass.data[add_entities_key] = async_add_entities
+    result: SensorMetadata = {}
+    for sentence in smart_data:
+        group = sentence["group"]
+        for field in sentence["fields"]:
+            result[field["unique_id"]] = {
+                "full_description": field["full_description"],
+                "group": group,
+                "unit_of_measurement": field.get("unit_of_measurement"),
+            }
+    return result
 
 
-    # Initialize a dictionary to store references to the created sensors
-    hass.data[created_sensors_key] = {}
-    hass.data[gps_key] = {}
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: Any,
+    async_add_entities: Callable[..., None],
+) -> None:
+    """Set up one entry-scoped serial hub entity."""
+    config = {**entry.data, **entry.options}
+    name = config[CONF_NAME]
+    serial_port = config[CONF_SERIAL_PORT]
+    baudrate = config.get(CONF_BAUDRATE, DEFAULT_BAUDRATE)
 
-
-    # Load the VictronUSB json data
-    config_dir = hass.config.config_dir
-    json_path = os.path.join(config_dir, 'custom_components', 'victronusb', 'Victronusb.json')
+    metadata_path = Path(__file__).with_name("Victronusb.json")
     try:
-        smart_data = await hass.async_add_executor_job(load_smart_data, json_path)
-        
-        result_dict = {}
-        for sentence in smart_data:
-            group = sentence["group"]  # Capture the group for all fields within this sentence
-            for field in sentence["fields"]:
-                result_dict[field["unique_id"]] = {
-                    "full_description": field["full_description"],
-                    "group": group,
-                    "unit_of_measurement": field.get("unit_of_measurement", None)
-                }
-
-
-
-        hass.data[victronusb_data_key] = result_dict
-
-    except Exception as e:
-        _LOGGER.error(f"Error loading Victronusb.json: {e}")
+        metadata = await hass.async_add_executor_job(load_smart_data, metadata_path)
+    except (OSError, ValueError, KeyError, TypeError):
+        _LOGGER.exception("Unable to load VE.Direct sensor metadata")
         return
 
-    _LOGGER.debug(f"Loaded victron data: {hass.data[victronusb_data_key]}")
-
-
-
     sensor = SerialSensor(
-        name,
-        serial_port,
-        baudrate,
-        bytesize,
-        parity,
-        stopbits,
-        xonxoff,
-        rtscts,
-        dsrdtr,
+        name=name,
+        port=serial_port,
+        baudrate=baudrate,
+        metadata=metadata,
+        async_add_entities=async_add_entities,
     )
-    
-    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, sensor.stop_serial_read)
+    hass.data[DOMAIN][entry.entry_id]["sensor"] = sensor
+    _LOGGER.info("Configuring %s on %s at %s baud", name, serial_port, baudrate)
     async_add_entities([sensor], True)
 
-    # Start the task that updates the sensor availability every 5 minutes
-    hass.loop.create_task(update_sensor_availability(hass,name))
-
-
-def translate_unit(unit_of_measurement):
-    
-    if unit_of_measurement is None:
-        return None
-    
-    unit_of_measurement = unit_of_measurement.upper()
-
-    translation = {
-        'mV': 'mV',
-        'P': '%',
-        'W': 'W',
-        'mA': 'mA',
-        'Dc': '°C',
-        'mAh': 'mAh',
-        'MIN': 'minutes',
-        'SEC': 'seconds',
-        'ckWh': '0.01 kWh'
-    }
-    
-    return translation.get(unit_of_measurement, unit_of_measurement)
-
-
-
-async def set_smart_sensors(hass, line, instance_name):
-    """Process the content of the line related to the smart sensors."""
-    try:
-        if not line:
-            return
-
-        # Make the checksum a seperate field instead of joined to the last field
-        # if '*' in line[-3:]:
-        #     line = line[:-3] + line[-3:].replace('*', ',')
-            
-        # Splitting by comma and getting the data fields
-        fields = line.split('\t')
-        if len(fields) != 2:  # Ensure enough fields and length
-            _LOGGER.error(f"Malformed line: {line}")
-            return
-
-        field_label = fields[0]  # Gets the Field label
-
-        _LOGGER.debug(f"Sentence_id: {field_label}")
-        
-        # Dynamically construct the keys based on the instance name
-        victronusb_data_key = f"{instance_name}_victronusb_data"
-        created_sensors_key = f"{instance_name}_created_sensors"
-        add_entities_key = f"{instance_name}_add_entities"
-
-        field_data = fields[1]
-        sentence_type = field_label
-        sensor_name = f"{sentence_type}"
-
-        if sensor_name not in hass.data[created_sensors_key]:
-            _LOGGER.debug(f"Creating field sensor: {sensor_name}")
-
-            short_sensor_name = f"{field_label}"
-            sensor_info = hass.data[victronusb_data_key].get(short_sensor_name)
-
-            # If sensor_info does not exist, skip this loop iteration
-            if sensor_info is None:
-                _LOGGER.debug(f"Skipping creation/update for undefined sensor: {sensor_name}")
-                return
-
-            full_desc = sensor_info["full_description"] if sensor_info else sensor_name
-            group = sensor_info["group"]
-            unit_of_measurement = sensor_info.get("unit_of_measurement")
-            device_name = full_desc
-            unit = unit_of_measurement
-
-            sensor = SmartSensor(
-                sensor_name,
-                full_desc,
-                field_data,
-                group,
-                unit,
-                device_name,
-                sentence_type
-            )
-
-            # Add Sensor to Home Assistant
-            hass.data[add_entities_key]([sensor])
-
-            # Update dictionary with added sensor
-            hass.data[created_sensors_key][sensor_name] = sensor
-
-        else:
-            _LOGGER.debug(f"Updating field sensor: {sensor_name}")
-            sensor = hass.data[created_sensors_key][sensor_name]
-            sensor.set_state(field_data)
-
-
-    except IndexError:
-        _LOGGER.error(f"Index error for line: {line}")
-    except KeyError as e:
-        _LOGGER.error(f"Key error: {e}")
-    except Exception as e:
-        _LOGGER.error(f"An unexpected error occurred: {e}")
-
-
-# SmartSensor class representing a basic sensor entity with state
 
 class SmartSensor(SensorEntity):
-    def __init__(
-        self, 
-        name, 
-        friendly_name, 
-        initial_state, 
-        group=None, 
-        unit_of_measurement=None, 
-        device_name=None, 
-        sentence_type=None
-    ):
-        """Initialize the sensor."""
-        _LOGGER.info(f"Initializing sensor: {name} with state: {initial_state}")
+    """A dynamic sensor backed by a validated VE.Direct field."""
 
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        name: str,
+        friendly_name: str,
+        initial_state: str,
+        group: str | None = None,
+        unit_of_measurement: str | None = None,
+        device_name: str | None = None,
+        sentence_type: str | None = None,
+    ) -> None:
+        """Initialize a dynamic sensor without changing legacy identifiers."""
         self._unique_id = name.lower().replace(" ", "_")
         self.entity_id = f"sensor.{self._unique_id}"
-        self._name = friendly_name if friendly_name else self._unique_id
+        self._name = friendly_name or self._unique_id
         self._state = initial_state
-        self._group = group if group is not None else "Other"
+        self._group = group or "Other"
         self._device_name = device_name
         self._sentence_type = sentence_type
         self._unit_of_measurement = unit_of_measurement
-        self._state_class = SensorStateClass.MEASUREMENT
         self._last_updated = datetime.now()
-        if initial_state is None or initial_state == "":
-            self._available = False
-            _LOGGER.debug(f"Setting sensor: '{self._name}' with unavailable")
-        else:
-            self._available = True
+        self._available = bool(initial_state)
 
     @property
-    def name(self):
-        """Return the name of the sensor."""
+    def name(self) -> str:
+        """Return the friendly name."""
         return self._name
+
     @property
-    def unique_id(self):
-        """Return a unique ID."""
+    def unique_id(self) -> str:
+        """Return the legacy unique ID."""
         return self._unique_id
 
     @property
-    def state(self):
-        """Return the state of the sensor."""
+    def native_value(self) -> str:
+        """Return the latest field value."""
         return self._state
 
     @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement."""
+    def native_unit_of_measurement(self) -> str | None:
+        """Return the configured native unit."""
         return self._unit_of_measurement
 
     @property
-    def device_info(self):
-        """Return device information about this sensor."""
+    def unit_of_measurement(self) -> str | None:
+        """Return the unit for compatibility with older Home Assistant."""
+        return self._unit_of_measurement
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Return the existing device grouping."""
         return {
-            "identifiers": {("victronusb", self._device_name)},
+            "identifiers": {(DOMAIN, self._device_name)},
             "name": self._device_name,
             "manufacturer": self._group,
             "model": self._sentence_type,
         }
 
     @property
-    def state_class(self):
-        """Return the state class of the sensor."""
-        return self._state_class
-
+    def state_class(self) -> SensorStateClass:
+        """Return the existing measurement state class."""
+        return SensorStateClass.MEASUREMENT
 
     @property
-    def last_updated(self):
-        """Return the last updated timestamp of the sensor."""
+    def last_updated(self) -> datetime:
+        """Return the most recent field update time."""
         return self._last_updated
 
     @property
     def available(self) -> bool:
-        """Return True if the entity is available."""
+        """Return whether validated frames are arriving."""
         return self._available
 
-    @property
-    def should_poll(self) -> bool:
-        """Return the polling requirement for this sensor."""
-        return False
-
-
-
-    def update_availability(self):
-        """Update the availability status of the sensor."""
-
-        new_availability = (datetime.now() - self._last_updated) < timedelta(minutes=4)
-
-        self._available = new_availability
-
-        try:
-            self.async_schedule_update_ha_state()
-        except RuntimeError as re:
-            if "Attribute hass is None" in str(re):
-                pass  # Ignore this specific error
-            else:
-                _LOGGER.warning(f"Could not update state for sensor '{self._name}': {re}")
-        except Exception as e:  # Catch all other exception types
-            _LOGGER.warning(f"Could not update state for sensor '{self._name}': {e}")
-
-    def set_state(self, new_state):
-        """Set the state of the sensor."""
-        _LOGGER.debug(f"Setting state for sensor: '{self._name}' to {new_state}")
+    def set_state(self, new_state: str) -> None:
+        """Store a field value and restore entity availability."""
         self._state = new_state
-        if new_state is None or new_state == "":
-            self._available = False
-            _LOGGER.debug(f"Setting sensor:'{self._name}' with unavailable")
-        else:
-            self._available = True
         self._last_updated = datetime.now()
+        self._available = bool(new_state)
+        self._write_state()
 
-        try:
-            self.async_schedule_update_ha_state()
-        except RuntimeError as re:
-            if "Attribute hass is None" in str(re):
-                pass  # Ignore this specific error
-            else:
-                _LOGGER.warning(f"Could not update state for sensor '{self._name}': {re}")
-        except Exception as e:  # Catch all other exception types
-            _LOGGER.warning(f"Could not update state for sensor '{self._name}': {e}")
+    def set_available(self, available: bool) -> None:
+        """Apply connection availability without discarding the last value."""
+        if self._available == available:
+            return
+        self._available = available
+        self._write_state()
 
+    def _write_state(self) -> None:
+        if getattr(self, "_hass", None) is not None:
+            self.async_write_ha_state()
 
-
-# SerialSensor class representing a sensor entity interacting with a serial device
 
 class SerialSensor(SensorEntity):
-    """Representation of a Serial sensor."""
+    """Hub entity adapting validated serial frames to dynamic sensors."""
 
     _attr_should_poll = False
 
     def __init__(
         self,
-        name,
-        port,
-        baudrate,
-        bytesize,
-        parity,
-        stopbits,
-        xonxoff,
-        rtscts,
-        dsrdtr,
-    ):
-        """Initialize the Serial sensor."""
+        *,
+        name: str,
+        port: str,
+        baudrate: int,
+        metadata: SensorMetadata,
+        async_add_entities: Callable[..., None],
+    ) -> None:
+        """Initialize the serial entity and its owned manager."""
         self._name = name
-        self._state = None
-        self._port = port
-        self._baudrate = baudrate
-        self._bytesize = bytesize
-        self._parity = parity
-        self._stopbits = stopbits
-        self._xonxoff = xonxoff
-        self._rtscts = rtscts
-        self._dsrdtr = dsrdtr
-        self._serial_loop_task = None
-        self._attributes = None
-
-    async def async_added_to_hass(self) -> None:
-        """Handle when an entity is about to be added to Home Assistant."""
-        self._serial_loop_task = self.hass.loop.create_task(
-            self.serial_read(
-                self._port,
-                self._baudrate,
-                self._bytesize,
-                self._parity,
-                self._stopbits,
-                self._xonxoff,
-                self._rtscts,
-                self._dsrdtr,
-            )
+        self._attributes: dict[str, Any] | None = None
+        self._available = False
+        self._metadata = metadata
+        self._async_add_entities = async_add_entities
+        self._created_sensors: dict[str, SmartSensor] = {}
+        self._last_processed: dict[str, float] = {}
+        self._manager = SerialConnectionManager(
+            device=port,
+            connector=serial_asyncio.open_serial_connection,
+            connection_kwargs={
+                "url": port,
+                "baudrate": baudrate,
+                "bytesize": EIGHTBITS,
+                "parity": PARITY_NONE,
+                "stopbits": STOPBITS_ONE,
+                "xonxoff": False,
+                "rtscts": False,
+                "dsrdtr": False,
+            },
+            on_frame=self._handle_frame,
+            on_availability=self._set_connection_availability,
+            silence_timeout=FRAME_SILENCE_TIMEOUT,
         )
 
+    async def async_added_to_hass(self) -> None:
+        """Start owned background tasks after Home Assistant adds the entity."""
+        await super().async_added_to_hass()
+        self._manager.start()
 
+    async def async_will_remove_from_hass(self) -> None:
+        """Await task cancellation and transport closure during unload."""
+        await self._manager.stop()
+        await super().async_will_remove_from_hass()
 
+    async def _handle_frame(self, records: tuple[tuple[str, str], ...]) -> None:
+        """Create or update sensors from one validated frame."""
+        now = asyncio.get_running_loop().time()
+        for field_label, field_data in records:
+            last_processed = self._last_processed.get(field_label)
+            if (
+                last_processed is not None
+                and now - last_processed < MIN_UPDATE_INTERVAL
+            ):
+                continue
+            self._process_record(field_label, field_data)
+            self._last_processed[field_label] = now
 
+    def _process_record(self, field_label: str, field_data: str) -> None:
+        sensor_info = self._metadata.get(field_label)
+        if sensor_info is None:
+            _LOGGER.debug("Ignoring undefined VE.Direct field %s", field_label)
+            return
 
+        sensor = self._created_sensors.get(field_label)
+        if sensor is not None:
+            sensor.set_state(field_data)
+            return
 
-    async def serial_read(
-        self,
-        device,
-        baudrate,
-        bytesize,
-        parity,
-        stopbits,
-        xonxoff,
-        rtscts,
-        dsrdtr,
-        **kwargs,
-    ):
-        
-        
-        last_processed = {}  # Dictionary to store last processed timestamp for each sentence type
-        min_interval = timedelta(seconds=5)  # Minimum time interval between processing each sentence type
+        full_description = sensor_info.get("full_description") or field_label
+        group = sensor_info.get("group")
+        unit = sensor_info.get("unit_of_measurement")
+        sensor = SmartSensor(
+            field_label,
+            full_description,
+            field_data,
+            group,
+            unit,
+            full_description,
+            field_label,
+        )
+        self._created_sensors[field_label] = sensor
+        self._async_add_entities([sensor])
 
-        """Read the data from the port."""
-        logged_error = False
-        while True:
-            try:
-                reader, _ = await serial_asyncio.open_serial_connection(
-                    url=device,
-                    baudrate=baudrate,
-                    bytesize=bytesize,
-                    parity=parity,
-                    stopbits=stopbits,
-                    xonxoff=xonxoff,
-                    rtscts=rtscts,
-                    dsrdtr=dsrdtr,
-                    **kwargs,
-                )
-
-            except SerialException as exc:
-                if not logged_error:
-                    _LOGGER.exception(
-                        "Unable to connect to the serial device %s: %s. Will retry",
-                        device,
-                        exc,
-                    )
-                    logged_error = True
-                await self._handle_error()
-            else:
-                _LOGGER.info("Serial device %s connected", device)
-
-
-                while True:
-                    try:
-                        line = await reader.readline()
-                    except SerialException as exc:
-                        _LOGGER.exception("Error while reading serial device %s: %s", device, exc)
-                        await self._handle_error()
-                        break
-                    else:
-                        try:
-                            line = line.decode("utf-8").strip()
-                        except UnicodeDecodeError as exc:
-                            _LOGGER.error("Failed to decode line from UTF-8: %s", exc)
-                            continue
-
-                        sentence_type = line[:6]  
-                        
-                        now = datetime.now()
-                        
-                        if sentence_type not in last_processed or now - last_processed[sentence_type] >= min_interval:
-                            _LOGGER.debug(f"Processing: {line}")
-                            await set_smart_sensors(self.hass, line, self.name)
-                            last_processed[sentence_type] = now
-                        else:
-                            _LOGGER.debug(f"Skipping {sentence_type} due to throttling")
-
-
-
-
-
-    async def _handle_error(self):
-        """Handle error for serial connection."""
-        self._state = None
-        self._attributes = None
-        self.async_write_ha_state()
-        await asyncio.sleep(5)
-
-    @callback
-    def stop_serial_read(self, event):
-        """Close resources."""
-        if self._serial_loop_task:
-            self._serial_loop_task.cancel()
+    def _set_connection_availability(self, available: bool) -> None:
+        self._available = available
+        for sensor in self._created_sensors.values():
+            sensor.set_available(available)
+        if getattr(self, "_hass", None) is not None:
+            self.async_write_ha_state()
 
     @property
-    def name(self):
-        """Return the name of the sensor."""
+    def name(self) -> str:
+        """Return the configured hub name."""
         return self._name
 
     @property
-    def extra_state_attributes(self):
-        """Return the attributes of the entity (if any JSON present)."""
+    def available(self) -> bool:
+        """Return whether validated frames are arriving."""
+        return self._available
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the legacy attributes value."""
         return self._attributes
 
     @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        return self._state
+    def native_value(self) -> None:
+        """The hub has no measurement value."""
+        return None
