@@ -78,12 +78,20 @@ class SerialConnectionManager:
         """Return the current serial writer/transport."""
         return self._writer
 
-    def start(self) -> None:
+    async def async_start(self) -> None:
         """Start exactly one reader and one availability task."""
         if self._reader_task is not None and not self._reader_task.done():
             return
-        if self._availability_task is not None and not self._availability_task.done():
-            self._availability_task.cancel()
+        tasks_to_wait = [
+            task
+            for task in (self._reader_task, self._availability_task)
+            if task is not None
+        ]
+        for task in tasks_to_wait:
+            if not task.done():
+                task.cancel()
+        if tasks_to_wait:
+            await asyncio.gather(*tasks_to_wait, return_exceptions=True)
         self._set_available(False)
         self._reader_task = asyncio.create_task(
             self._reader_loop(), name=f"victronusb-reader-{self._device}"

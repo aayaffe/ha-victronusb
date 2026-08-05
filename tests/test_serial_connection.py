@@ -124,7 +124,7 @@ class SerialConnectionManagerTests(unittest.IsolatedAsyncioTestCase):
         )
         manager = self.make_manager(connector, on_frame)
 
-        manager.start()
+        await manager.async_start()
         await asyncio.wait_for(received.wait(), 1)
         await manager.stop()
 
@@ -145,7 +145,7 @@ class SerialConnectionManagerTests(unittest.IsolatedAsyncioTestCase):
         )
         manager = self.make_manager(connector, on_frame)
 
-        manager.start()
+        await manager.async_start()
         await asyncio.wait_for(received.wait(), 1)
         await manager.stop()
 
@@ -170,7 +170,7 @@ class SerialConnectionManagerTests(unittest.IsolatedAsyncioTestCase):
             silence_timeout=0.02,
         )
 
-        manager.start()
+        await manager.async_start()
         await asyncio.wait_for(received.wait(), 1)
         await manager.stop()
 
@@ -183,7 +183,7 @@ class SerialConnectionManagerTests(unittest.IsolatedAsyncioTestCase):
         connector = FakeConnector(reader)
         manager = self.make_manager(connector)
 
-        manager.start()
+        await manager.async_start()
         await asyncio.wait_for(reader.read_started.wait(), 1)
         reader_task = manager.reader_task
         availability_task = manager.availability_task
@@ -208,10 +208,10 @@ class SerialConnectionManagerTests(unittest.IsolatedAsyncioTestCase):
         first = self.make_manager(connector)
         second = self.make_manager(connector)
 
-        first.start()
+        await first.async_start()
         await asyncio.wait_for(first_reader.read_started.wait(), 1)
         await first.stop()
-        second.start()
+        await second.async_start()
         await asyncio.wait_for(second_reader.read_started.wait(), 1)
         await second.stop()
 
@@ -270,7 +270,7 @@ class SerialConnectionManagerTests(unittest.IsolatedAsyncioTestCase):
         manager = self.make_manager(connector)
         entity._manager = manager
 
-        manager.start()
+        await manager.async_start()
         await asyncio.wait_for(reader.read_started.wait(), 1)
         writer = manager.writer
         await entity.async_will_remove_from_hass()
@@ -278,6 +278,84 @@ class SerialConnectionManagerTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(writer.closed)
         self.assertIsNone(manager.reader_task)
         self.assertIsNone(manager.availability_task)
+
+    async def test_hub_availability_writes_state_after_entity_is_added(self) -> None:
+        """Using the obsolete private hass attribute suppresses this write."""
+        sensor_base = type(
+            "SensorEntity",
+            (),
+            {
+                "hass": None,
+                "async_will_remove_from_hass": _async_noop,
+                "async_added_to_hass": _async_noop,
+                "async_write_ha_state": lambda self: None,
+            },
+        )
+        homeassistant = ModuleType("homeassistant")
+        sensor_module = ModuleType("homeassistant.components.sensor")
+        sensor_module.SensorEntity = sensor_base
+        sensor_module.SensorStateClass = type(
+            "SensorStateClass", (), {"MEASUREMENT": "measurement"}
+        )
+        components = ModuleType("homeassistant.components")
+        components.sensor = sensor_module
+        const = ModuleType("homeassistant.const")
+        const.CONF_NAME = "name"
+        core = ModuleType("homeassistant.core")
+        core.HomeAssistant = object
+        homeassistant.components = components
+        sys.modules["homeassistant"] = homeassistant
+        sys.modules["homeassistant.components"] = components
+        sys.modules["homeassistant.components.sensor"] = sensor_module
+        sys.modules["homeassistant.const"] = const
+        sys.modules["homeassistant.core"] = core
+
+        serial_asyncio = ModuleType("serial_asyncio")
+        serial_asyncio.open_serial_connection = lambda **_kwargs: None
+        serial = ModuleType("serial")
+        serial.EIGHTBITS = 8
+        serial.PARITY_NONE = "N"
+        serial.STOPBITS_ONE = 1
+        sys.modules["serial_asyncio"] = serial_asyncio
+        sys.modules["serial"] = serial
+        sys.modules["custom_components.victronusb"].DOMAIN = "victronusb"
+
+        sensor_integration = load_integration_module("sensor")
+        entity = sensor_integration.SerialSensor(
+            name="Battery",
+            port="/dev/serial/by-id/fake",
+            baudrate=19200,
+            metadata={},
+            async_add_entities=lambda _entities: None,
+        )
+        writes: list[None] = []
+        entity.hass = object()
+        entity.async_write_ha_state = lambda: writes.append(None)
+
+        entity._set_connection_availability(True)
+
+        self.assertEqual([None], writes)
+
+    async def test_async_start_awaits_previous_watchdog_before_replacing_it(
+        self,
+    ) -> None:
+        """Replacing a watchdog before cancellation completes breaks this test."""
+        first_reader = FakeReader()
+        second_reader = FakeReader()
+        connector = FakeConnector(first_reader, second_reader)
+        manager = self.make_manager(connector)
+
+        await manager.async_start()
+        await asyncio.wait_for(first_reader.read_started.wait(), 1)
+        old_watchdog = manager.availability_task
+        manager.reader_task.cancel()
+        await asyncio.gather(manager.reader_task, return_exceptions=True)
+
+        await manager.async_start()
+
+        self.assertTrue(old_watchdog.done())
+        self.assertIsNot(old_watchdog, manager.availability_task)
+        await manager.stop()
 
 
 async def _async_noop(_self) -> None:

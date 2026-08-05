@@ -218,7 +218,7 @@ class SerialSensor(SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Start owned background tasks after Home Assistant adds the entity."""
         await super().async_added_to_hass()
-        self._manager.start()
+        await self._manager.async_start()
 
     async def async_will_remove_from_hass(self) -> None:
         """Await task cancellation and transport closure during unload."""
@@ -268,7 +268,7 @@ class SerialSensor(SensorEntity):
         self._available = available
         for sensor in self._created_sensors.values():
             sensor.set_available(available)
-        if getattr(self, "_hass", None) is not None:
+        if self.hass is not None:
             self.async_write_ha_state()
 
     @property

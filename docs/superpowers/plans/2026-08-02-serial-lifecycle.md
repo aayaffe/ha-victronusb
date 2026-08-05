@@ -66,7 +66,7 @@ Expected: all parser tests pass.
 
 **Interfaces:**
 - Consumes: `VEDirectParser`
-- Produces: `SerialConnectionManager.start() -> None`
+- Produces: `SerialConnectionManager.async_start() -> None`
 - Produces: `SerialConnectionManager.stop() -> None`
 - Exposes read-only `reader_task`, `availability_task`, and `writer`
 - Calls async `on_frame(records)` and sync `on_availability(available)`
