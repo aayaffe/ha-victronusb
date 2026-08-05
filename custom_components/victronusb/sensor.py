@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -142,9 +143,16 @@ class SmartSensor(SensorEntity):
         }
 
     @property
-    def state_class(self) -> SensorStateClass:
-        """Return the existing measurement state class."""
-        return SensorStateClass.MEASUREMENT
+    def state_class(self) -> SensorStateClass | None:
+        """Return a state class only when Home Assistant can store a number."""
+        try:
+            return (
+                SensorStateClass.MEASUREMENT
+                if math.isfinite(float(self._state))
+                else None
+            )
+        except (TypeError, ValueError):
+            return None
 
     @property
     def last_updated(self) -> datetime:
