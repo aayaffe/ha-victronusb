@@ -65,7 +65,7 @@ async def async_setup_entry(
         metadata = await hass.async_add_executor_job(load_smart_data, metadata_path)
     except (OSError, ValueError, KeyError, TypeError):
         _LOGGER.exception("Unable to load VE.Direct sensor metadata")
-        return
+        raise
 
     sensor = SerialSensor(
         name=name,
