@@ -82,6 +82,8 @@ class SerialConnectionManager:
         """Start exactly one reader and one availability task."""
         if self._reader_task is not None and not self._reader_task.done():
             return
+        if self._availability_task is not None and not self._availability_task.done():
+            self._availability_task.cancel()
         self._set_available(False)
         self._reader_task = asyncio.create_task(
             self._reader_loop(), name=f"victronusb-reader-{self._device}"
