@@ -171,7 +171,7 @@ class SmartSensor(SensorEntity):
         self._write_state()
 
     def _write_state(self) -> None:
-        if getattr(self, "_hass", None) is not None:
+        if self.hass is not None:
             self.async_write_ha_state()
 
 
