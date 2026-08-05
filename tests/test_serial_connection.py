@@ -336,6 +336,54 @@ class SerialConnectionManagerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([None], writes)
 
+    async def test_text_vedirect_sensor_has_no_measurement_state_class(self) -> None:
+        """Marking a text field as measurement makes HA stop the reader callback."""
+        sensor_base = type(
+            "SensorEntity",
+            (),
+            {
+                "hass": None,
+                "async_will_remove_from_hass": _async_noop,
+                "async_added_to_hass": _async_noop,
+                "async_write_ha_state": lambda self: None,
+            },
+        )
+        homeassistant = ModuleType("homeassistant")
+        sensor_module = ModuleType("homeassistant.components.sensor")
+        sensor_module.SensorEntity = sensor_base
+        sensor_module.SensorStateClass = type(
+            "SensorStateClass", (), {"MEASUREMENT": "measurement"}
+        )
+        components = ModuleType("homeassistant.components")
+        components.sensor = sensor_module
+        const = ModuleType("homeassistant.const")
+        const.CONF_NAME = "name"
+        core = ModuleType("homeassistant.core")
+        core.HomeAssistant = object
+        homeassistant.components = components
+        sys.modules["homeassistant"] = homeassistant
+        sys.modules["homeassistant.components"] = components
+        sys.modules["homeassistant.components.sensor"] = sensor_module
+        sys.modules["homeassistant.const"] = const
+        sys.modules["homeassistant.core"] = core
+
+        serial_asyncio = ModuleType("serial_asyncio")
+        serial_asyncio.open_serial_connection = lambda **_kwargs: None
+        serial = ModuleType("serial")
+        serial.EIGHTBITS = 8
+        serial.PARITY_NONE = "N"
+        serial.STOPBITS_ONE = 1
+        sys.modules["serial_asyncio"] = serial_asyncio
+        sys.modules["serial"] = serial
+        sys.modules["custom_components.victronusb"].DOMAIN = "victronusb"
+
+        sensor_integration = load_integration_module("sensor")
+        text_sensor = sensor_integration.SmartSensor("PID", "PID", "0x203")
+        numeric_sensor = sensor_integration.SmartSensor("V", "Voltage", "13044")
+
+        self.assertIsNone(text_sensor.state_class)
+        self.assertEqual("measurement", numeric_sensor.state_class)
+
     async def test_async_start_awaits_previous_watchdog_before_replacing_it(
         self,
     ) -> None:

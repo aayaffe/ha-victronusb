@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Do not declare textual VE.Direct fields, including `PID`, `Alarm`, and
+  `Relay`, as numeric measurements. This prevents Home Assistant validation
+  errors from terminating the serial frame callback and reconnect loop.
+
 ## 0.2.0
 
 - Parse and validate complete VE.Direct TEXT frames as bytes, preserving the
